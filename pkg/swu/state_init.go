@@ -46,6 +46,11 @@ func (s *Session) sendIKESAInit() error {
 }
 
 func (s *Session) buildIKESAInitPacket() ([]byte, error) {
+	logger.Info("[O2-DEBUG] buildIKESAInitPacket called",
+		"cfg.MCC", s.cfg.MCC,
+		"cfg.MNC", s.cfg.MNC,
+		"cfg.IKEProposals_count", len(s.cfg.IKEProposals))
+
 	if len(s.ni) == 0 {
 		s.ni = make([]byte, 32)
 		rand.Read(s.ni)
@@ -56,11 +61,19 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 	dhGroup := 14 // Default: modp2048
 	dhGroupType := ikev2.MODP_2048_bit
 
-	if s.cfg.MCC == "262" && (s.cfg.MNC == "03" || s.cfg.MNC == "003") {
+	isO2Germany := s.cfg.MCC == "262" && (s.cfg.MNC == "03" || s.cfg.MNC == "003")
+	logger.Info("[O2-DEBUG] Checking O2 Germany condition",
+		"mcc", s.cfg.MCC,
+		"mnc", s.cfg.MNC,
+		"mcc_match", s.cfg.MCC == "262",
+		"mnc_match", s.cfg.MNC == "03" || s.cfg.MNC == "003",
+		"isO2Germany", isO2Germany)
+
+	if isO2Germany {
 		// O2 Germany requires modp1024 (DH Group 2)
 		dhGroup = 2
 		dhGroupType = ikev2.MODP_1024_bit
-		logger.Info("Using modp1024 for O2 Germany", "mcc", s.cfg.MCC, "mnc", s.cfg.MNC)
+		logger.Info("[O2-DEBUG] Using modp1024 for O2 Germany", "mcc", s.cfg.MCC, "mnc", s.cfg.MNC)
 	}
 
 	if s.DH == nil {
@@ -79,10 +92,17 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 	if s.cfg.MCC == "262" && (s.cfg.MNC == "03" || s.cfg.MNC == "003") {
 		// O2 Germany: Use modp1024-only proposals
 		proposals = ikev2.CreateO2GermanyProposalsIKE(nil)
-		logger.Info("Using O2 Germany IKE proposals", "count", len(proposals))
+		logger.Info("[O2-DEBUG] Using O2 Germany IKE proposals",
+			"count", len(proposals),
+			"dhGroup", dhGroup,
+			"dhGroupType", dhGroupType)
 	} else {
 		// Default: Use multi-proposal with high compatibility
 		proposals = ikev2.CreateMultiProposalIKE(nil)
+		logger.Info("[O2-DEBUG] Using default multi-proposals",
+			"count", len(proposals),
+			"dhGroup", dhGroup,
+			"dhGroupType", dhGroupType)
 	}
 
 	saPayload := &ikev2.EncryptedPayloadSA{

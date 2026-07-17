@@ -1,3 +1,5 @@
+//go:build linux
+
 package swu
 
 import (
@@ -6,6 +8,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	//"encoding/hex"
@@ -46,7 +49,7 @@ func (s *Session) sendIKESAInit() error {
 }
 
 func (s *Session) buildIKESAInitPacket() ([]byte, error) {
-	fmt.Printf("[O2-DEBUG] buildIKESAInitPacket: cfg.MCC=%s cfg.MNC=%s cfg.IKEProposals=%d\n",
+	logger.Info("[O2-DEBUG] buildIKESAInitPacket: cfg.MCC=%s cfg.MNC=%s cfg.IKEProposals=%d",
 		s.cfg.MCC, s.cfg.MNC, len(s.cfg.IKEProposals))
 
 	if len(s.ni) == 0 {
@@ -54,18 +57,37 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 		rand.Read(s.ni)
 	}
 
-	// Determine DH group based on carrier
+	// Determine DH group: use cfg.IKEProposals when set, otherwise hardcoded carrier detection
+	var useO2Modp1024 bool
+
+	if len(s.cfg.IKEProposals) > 0 {
+		logger.Info("[O2-DEBUG] cfg.IKEProposals is set, checking for modp1024",
+			"count", len(s.cfg.IKEProposals))
+
+		for _, p := range s.cfg.IKEProposals {
+			if strings.Contains(p, "modp1024") {
+				useO2Modp1024 = true
+				logger.Info("[O2-DEBUG] Found modp1024 in cfg.IKEProposals",
+					"proposal", p)
+				break
+			}
+		}
+	} else {
+		// Legacy hardcoded carrier detection (fallback)
+		useO2Modp1024 = s.cfg.MCC == "262" && (s.cfg.MNC == "03" || s.cfg.MNC == "003")
+		logger.Info("[O2-DEBUG] Using legacy carrier check",
+			"mcc", s.cfg.MCC,
+			"mnc", s.cfg.MNC,
+			"isO2Germany", useO2Modp1024)
+	}
+
 	dhGroup := 14 // Default: modp2048
 	dhGroupType := ikev2.MODP_2048_bit
 
-	isO2Germany := s.cfg.MCC == "262" && (s.cfg.MNC == "03" || s.cfg.MNC == "003")
-	fmt.Printf("[O2-DEBUG] O2 Germany check: MCC=%s MNC=%s mcc_match=%v mnc_match=%v isO2=%v\n",
-		s.cfg.MCC, s.cfg.MNC, s.cfg.MCC == "262", s.cfg.MNC == "03" || s.cfg.MNC == "003", isO2Germany)
-
-	if isO2Germany {
+	if useO2Modp1024 {
 		dhGroup = 2
 		dhGroupType = ikev2.MODP_1024_bit
-		fmt.Printf("[O2-DEBUG] Using modp1024 for O2 Germany, dhGroup=%d\n", dhGroup)
+		logger.Info("[O2-DEBUG] Using modp1024 for O2 Germany, dhGroup=%d", dhGroup)
 	}
 
 	if s.DH == nil {
@@ -80,12 +102,12 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 	}
 
 	var proposals []*ikev2.Proposal
-	if isO2Germany {
+	if useO2Modp1024 {
 		proposals = ikev2.CreateO2GermanyProposalsIKE(nil)
-		fmt.Printf("[O2-DEBUG] Using O2 Germany proposals, count=%d dhGroup=%d\n", len(proposals), dhGroup)
+		logger.Info("[O2-DEBUG] Using O2 Germany proposals, count=%d dhGroup=%d", len(proposals), dhGroup)
 	} else {
 		proposals = ikev2.CreateMultiProposalIKE(nil)
-		fmt.Printf("[O2-DEBUG] Using default multi-proposals, count=%d dhGroup=%d\n", len(proposals), dhGroup)
+		logger.Info("[O2-DEBUG] Using default multi-proposals, count=%d dhGroup=%d", len(proposals), dhGroup)
 	}
 
 	saPayload := &ikev2.EncryptedPayloadSA{

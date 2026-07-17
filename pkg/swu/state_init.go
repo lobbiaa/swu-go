@@ -77,7 +77,7 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 			s.cfg.MCC, s.cfg.MNC, useO2Modp1024)
 	}
 
-	dhGroup := 14 // Default: modp2048
+	dhGroup := uint16(14) // Default: modp2048
 	dhGroupType := ikev2.MODP_2048_bit
 
 	if useO2Modp1024 {
@@ -184,14 +184,13 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 	payloads = append(payloads, natSrcPayload, natDstPayload)
 
 	header := &ikev2.IKEHeader{
-		ISPI:   s.SPIi,
-		RSPI:   [8]byte{},
-		Next:   ikev2.PayloadTypeSA,
-		MjVer:  2,
-		MnVer:  0,
-		Exch:   ikev2.IKE_SA_INIT,
-		Flags:  ikev2.FlagInitiator,
-		MsgID:  0,
+		SPIi:         s.SPIi,
+		SPIr:         [8]byte{},
+		NextPayload:  ikev2.SA,
+		Version:      0x20,
+		ExchangeType: ikev2.IKE_SA_INIT,
+		Flags:        ikev2.FlagInitiator,
+		MessageID:    0,
 	}
 
 	packet, err := ikev2.EncodeIKE(header, payloads)

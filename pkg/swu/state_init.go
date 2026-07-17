@@ -52,11 +52,11 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 	}
 
 	// Determine DH group based on carrier
-	// O2 Germany (MCC=262, MNC=03) requires modp1024
+	// O2 Germany (MCC=262, MNC=03 or 003) requires modp1024
 	dhGroup := 14 // Default: modp2048
 	dhGroupType := ikev2.MODP_2048_bit
 
-	if s.cfg.MCC == "262" && s.cfg.MNC == "03" {
+	if s.cfg.MCC == "262" && (s.cfg.MNC == "03" || s.cfg.MNC == "003") {
 		// O2 Germany requires modp1024 (DH Group 2)
 		dhGroup = 2
 		dhGroupType = ikev2.MODP_1024_bit
@@ -76,7 +76,7 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 
 	// Generate proposals based on carrier
 	var proposals []*ikev2.Proposal
-	if s.cfg.MCC == "262" && s.cfg.MNC == "03" {
+	if s.cfg.MCC == "262" && (s.cfg.MNC == "03" || s.cfg.MNC == "003") {
 		// O2 Germany: Use modp1024-only proposals
 		proposals = ikev2.CreateO2GermanyProposalsIKE(nil)
 		logger.Info("Using O2 Germany IKE proposals", "count", len(proposals))

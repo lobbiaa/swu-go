@@ -51,9 +51,21 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 		rand.Read(s.ni)
 	}
 
+	// Determine DH group based on carrier
+	// O2 Germany (MCC=262, MNC=03) requires modp1024
+	dhGroup := 14 // Default: modp2048
+	dhGroupType := ikev2.MODP_2048_bit
+
+	if s.cfg.MCC == "262" && s.cfg.MNC == "03" {
+		// O2 Germany requires modp1024 (DH Group 2)
+		dhGroup = 2
+		dhGroupType = ikev2.MODP_1024_bit
+		logger.Info("Using modp1024 for O2 Germany", "mcc", s.cfg.MCC, "mnc", s.cfg.MNC)
+	}
+
 	if s.DH == nil {
 		var err error
-		s.DH, err = crypto.NewDiffieHellman(14)
+		s.DH, err = crypto.NewDiffieHellman(dhGroup)
 		if err != nil {
 			return nil, err
 		}
@@ -62,15 +74,23 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 		}
 	}
 
-	// 使用高兼容性的工厂方法生成 Proposal
-	proposals := ikev2.CreateMultiProposalIKE(nil)
+	// Generate proposals based on carrier
+	var proposals []*ikev2.Proposal
+	if s.cfg.MCC == "262" && s.cfg.MNC == "03" {
+		// O2 Germany: Use modp1024-only proposals
+		proposals = ikev2.CreateO2GermanyProposalsIKE(nil)
+		logger.Info("Using O2 Germany IKE proposals", "count", len(proposals))
+	} else {
+		// Default: Use multi-proposal with high compatibility
+		proposals = ikev2.CreateMultiProposalIKE(nil)
+	}
 
 	saPayload := &ikev2.EncryptedPayloadSA{
 		Proposals: proposals,
 	}
 
 	kePayload := &ikev2.EncryptedPayloadKE{
-		DHGroup: ikev2.MODP_2048_bit,
+		DHGroup: dhGroupType, // Use matching DH group
 		KEData:  s.DH.PublicKeyBytes(),
 	}
 

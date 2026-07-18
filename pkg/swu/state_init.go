@@ -53,7 +53,7 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 
 	if s.DH == nil {
 		var err error
-		s.DH, err = crypto.NewDiffieHellman(14)
+		s.DH, err = crypto.NewDiffieHellman(2)  // modp1024 for O2 Germany
 		if err != nil {
 			return nil, err
 		}
@@ -70,7 +70,7 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 	}
 
 	kePayload := &ikev2.EncryptedPayloadKE{
-		DHGroup: ikev2.MODP_2048_bit,
+		DHGroup: ikev2.MODP_1024_bit,  // modp1024 for O2 Germany
 		KEData:  s.DH.PublicKeyBytes(),
 	}
 

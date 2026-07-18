@@ -194,13 +194,17 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 		MessageID:    0,
 	}
 
-	packet, err := ikev2.EncodeIKE(header, payloads)
+	packet := ikev2.NewIKEPacket()
+	packet.Header = *header
+	packet.Payloads = payloads
+
+	data, err := packet.Encode()
 	if err != nil {
 		return nil, err
 	}
 
-	s.msgBuffer = packet
-	return packet, nil
+	s.msgBuffer = data
+	return data, nil
 }
 
 func (s *Session) handleIKESAInitResp(data []byte) error {

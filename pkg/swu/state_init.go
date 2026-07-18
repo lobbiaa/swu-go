@@ -184,18 +184,16 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 	}
 	payloads = append(payloads, natSrcPayload, natDstPayload)
 
-	header := &ikev2.IKEHeader{
+	packet := ikev2.NewIKEPacket()
+	packet.Header = ikev2.IKEHeader{
 		SPIi:         s.SPIi,
-		SPIr:         [8]byte{},
+		SPIr:         0,
 		NextPayload:  ikev2.SA,
 		Version:      0x20,
 		ExchangeType: ikev2.IKE_SA_INIT,
 		Flags:        ikev2.FlagInitiator,
 		MessageID:    0,
 	}
-
-	packet := ikev2.NewIKEPacket()
-	packet.Header = *header
 	packet.Payloads = payloads
 
 	data, err := packet.Encode()

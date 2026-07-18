@@ -45,7 +45,10 @@ func (s *Session) sendIKESAInit() error {
 	if err != nil {
 		return err
 	}
-	return s.socket.SendIKE(data)
+	fmt.Printf("[O2-DEBUG] sendIKESAInit: sending %d bytes via socket\n", len(data))
+	err = s.socket.SendIKE(data)
+	fmt.Printf("[O2-DEBUG] sendIKESAInit: SendIKE result=%v\n", err)
+	return err
 }
 
 func (s *Session) buildIKESAInitPacket() ([]byte, error) {

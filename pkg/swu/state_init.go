@@ -185,7 +185,7 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 	payloads = append(payloads, natSrcPayload, natDstPayload)
 
 	packet := ikev2.NewIKEPacket()
-	packet.Header = ikev2.IKEHeader{
+	packet.Header = &ikev2.IKEHeader{
 		SPIi:         s.SPIi,
 		SPIr:         0,
 		NextPayload:  ikev2.SA,

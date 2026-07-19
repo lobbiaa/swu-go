@@ -53,7 +53,7 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 
 	if s.DH == nil {
 		var err error
-		s.DH, err = crypto.NewDiffieHellman(2)  // modp1024 for O2 Germany
+		s.DH, err = crypto.NewDiffieHellman(14)  // Use DH group 14 (2048-bit MODP)
 		if err != nil {
 			return nil, err
 		}
@@ -62,15 +62,40 @@ func (s *Session) buildIKESAInitPacket() ([]byte, error) {
 		}
 	}
 
-	// 使用高兼容性的工厂方法生成 Proposal
-	proposals := ikev2.CreateMultiProposalIKE(nil)
+	// Use customized proposal based on carrier configuration
+	var proposals []*ikev2.Proposal
+
+	// Check if IKE proposals contain "single" mode flag
+	useSingleProposal := false
+	for _, prop := range s.cfg.IKEProposals {
+		// Simple substring check for "single"
+		for i := 0; i <= len(prop)-6; i++ {
+			if prop[i:i+6] == "single" {
+				useSingleProposal = true
+				break
+			}
+		}
+		if useSingleProposal {
+			break
+		}
+	}
+
+	if useSingleProposal {
+		// Single proposal mode (e.g., O2 Germany)
+		proposals = CreateO2GermanyProposal()
+		fmt.Printf("[IKE-PROPOSAL] Using single proposal mode (from config)\n")
+	} else {
+		// Multi-proposal mode for compatibility (default)
+		proposals = ikev2.CreateMultiProposalIKE(nil)
+		fmt.Printf("[IKE-PROPOSAL] Using multi-proposal mode\n")
+	}
 
 	saPayload := &ikev2.EncryptedPayloadSA{
 		Proposals: proposals,
 	}
 
 	kePayload := &ikev2.EncryptedPayloadKE{
-		DHGroup: ikev2.MODP_1024_bit,  // modp1024 for O2 Germany
+		DHGroup: 14,  // 2048 bit MODP group
 		KEData:  s.DH.PublicKeyBytes(),
 	}
 

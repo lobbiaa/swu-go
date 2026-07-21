@@ -1669,7 +1669,9 @@ func (s *Session) applyNetworkConfigOnTUN(iface string) error {
 		s.Logger.Info("Policy routing supported by driver", logger.String("iface", iface))
 		// 使用 TUN 接口的 link index 作为路由表 ID（避免与系统表冲突，加偏移 1000）
 		link, err := s.net.(*driver.NetTools).GetLink(iface)
-		if err == nil {
+		if err != nil {
+			s.Logger.Warn("GetLink failed, skipping policy routing", logger.String("iface", iface), logger.Err(err))
+		} else {
 			tableID := link.Attrs().Index + 1000
 			s.Logger.Info("Policy routing table ID assigned", logger.String("iface", iface), logger.Int("table", tableID))
 

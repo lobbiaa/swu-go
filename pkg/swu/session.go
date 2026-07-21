@@ -1671,15 +1671,19 @@ func (s *Session) applyNetworkConfigOnTUN(iface string) error {
 		link, err := s.net.(*driver.NetTools).GetLink(iface)
 		if err == nil {
 			tableID := link.Attrs().Index + 1000
+			s.Logger.Info("Policy routing table ID assigned", logger.String("iface", iface), logger.Int("table", tableID))
 
 			// O(1) 清理: 只注册一次 FlushRules 把与该设备(table/iface)相关的所有 rule 清除
 			s.netUndos = append(s.netUndos, func() error { return pr.FlushRules(tableID, iface) })
 
 			// 1. 添加基于入站接口 (iif) 的策略路由规则：iif <iface> lookup <tableID>
 			// 这解决了 RPF (反向路径过滤) 问题：确保入站包能匹配到正确的路由表
+			s.Logger.Info("Adding input rule (iif)", logger.String("iface", iface), logger.Int("table", tableID))
 			if err := pr.AddInputRule(iface, tableID); err != nil {
+				s.Logger.Warn("AddInputRule failed", logger.String("iface", iface), logger.Int("table", tableID), logger.Err(err))
 				return err
 			}
+			s.Logger.Info("Input rule added successfully", logger.String("iface", iface), logger.Int("table", tableID))
 
 			// 2. 添加基于源地址的策略路由规则：from <设备IP> lookup <tableID>
 			var srcCIDRs []string

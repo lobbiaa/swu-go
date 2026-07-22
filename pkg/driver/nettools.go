@@ -347,10 +347,29 @@ func (n *NetTools) AddRule(srcCIDR string, table int) error {
 	}
 
 	err = netlink.RuleAdd(rule)
-	if err != nil && isRuleExists(err) {
-		return nil
+	if err != nil {
+		if isRuleExists(err) {
+			// Rule already exists, not an error
+			return nil
+		}
+		return wrapErr("rule add", fmt.Sprintf("from %s lookup %d", srcCIDR, table), err)
 	}
-	return wrapErr("rule add", fmt.Sprintf("from %s lookup %d", srcCIDR, table), err)
+
+	// Verify rule was actually added
+	if rules, verifyErr := netlink.RuleList(family); verifyErr == nil {
+		found := false
+		for _, r := range rules {
+			if r.Src != nil && r.Src.String() == src.String() && r.Table == table {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("rule add succeeded but rule not found in list: from %s lookup %d", srcCIDR, table)
+		}
+	}
+
+	return nil
 }
 
 // DelRule 删除策略路由规则

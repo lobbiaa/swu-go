@@ -1690,6 +1690,7 @@ func (s *Session) applyNetworkConfigOnTUN(iface string) error {
 			s.Logger.Info("Input rule added successfully", logger.String("iface", iface), logger.Int("table", tableID))
 
 			// 2. 添加基于源地址的策略路由规则：from <设备IP> lookup <tableID>
+			s.Logger.Info("Preparing source rules", logger.Bool("cpConfig_nil", s.cpConfig == nil))
 			var srcCIDRs []string
 			if s.cpConfig != nil {
 				for _, ip := range s.cpConfig.IPv4Addresses {
@@ -1703,15 +1704,19 @@ func (s *Session) applyNetworkConfigOnTUN(iface string) error {
 					}
 				}
 			}
+			s.Logger.Info("Source CIDRs collected", logger.Int("count", len(srcCIDRs)))
 
 			// 先添加 ip rule
 			for _, src := range srcCIDRs {
+				s.Logger.Info("Adding source rule", logger.String("src", src), logger.Int("table", tableID))
 				if err := pr.AddRule(src, tableID); err != nil {
 					return err
 				}
 			}
+			s.Logger.Info("Source rules added", logger.Int("count", len(srcCIDRs)))
 
 			// 再添加路由到独立路由表 (路由表随接口 LinkDown 而内核自动隐式销毁)
+			s.Logger.Info("Adding routes to table", logger.Int("ipv4_routes", len(routes)), logger.Int("ipv6_routes", len(routes6)), logger.Int("table", tableID))
 			for _, cidr := range routes {
 				if err := pr.AddRouteTable(cidr, iface, tableID); err != nil {
 					return err

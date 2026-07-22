@@ -1780,6 +1780,12 @@ func (s *Session) startDataPlaneLoop() {
 
 	// TUN -> ESP
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.Logger.Error("TUN->ESP goroutine panic", logger.Any("panic", r))
+			}
+		}()
+
 		s.Logger.Info("TUN->ESP goroutine 启动")
 		buf := make([]byte, 2000)
 		var tunReadCount, espSendCount, saDropCount uint64
@@ -1789,16 +1795,17 @@ func (s *Session) startDataPlaneLoop() {
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			for range ticker.C {
-				s.Logger.Debug("TUN->ESP heartbeat",
+				s.Logger.Info("TUN->ESP heartbeat",
 					logger.Uint64("tunRead", tunReadCount),
 					logger.Uint64("espSend", espSendCount))
 			}
 		}()
 
+		s.Logger.Info("TUN->ESP about to enter read loop")
 		for {
-			s.Logger.Debug("TUN->ESP waiting for Read()")
+			s.Logger.Info("TUN->ESP waiting for Read()")
 			n, err := s.tun.Read(buf)
-			s.Logger.Debug("TUN->ESP Read() returned", logger.Int("n", n), logger.Bool("hasError", err != nil))
+			s.Logger.Info("TUN->ESP Read() returned", logger.Int("n", n), logger.Bool("hasError", err != nil))
 			if err != nil {
 				s.Logger.Info("TUN 读取结束", logger.Err(err))
 				break

@@ -93,11 +93,11 @@ func (s *Session) installIMSESPPolicyInternal(policy IMSESPPolicy) error {
 	s.imsESPRemotePortS = policy.RemotePortS
 
 	s.Logger.Info("IMS ESP policy installed",
-		loggerString("remote_ip", policy.RemoteIP.String()),
-		loggerInt("remote_port_s", policy.RemotePortS),
-		loggerUint32("spi_out", flowS.OutboundSPI),
-		loggerString("auth_alg", flowS.AuthAlg),
-		loggerString("enc_alg", flowS.EncAlg))
+		logger.String("remote_ip", policy.RemoteIP.String()),
+		logger.Int("remote_port_s", policy.RemotePortS),
+		logger.Uint32("spi_out", flowS.OutboundSPI),
+		logger.String("auth_alg", flowS.AuthAlg),
+		logger.String("enc_alg", flowS.EncAlg))
 
 	return nil
 }
@@ -131,35 +131,33 @@ func getIMSIntegrity(authAlg string) (crypto.IntegrityAlgorithm, error) {
 // nullEncrypter implements no-op encryption (ealg=null)
 type nullEncrypter struct{}
 
-func (e *nullEncrypter) Encrypt(plaintext, key []byte) ([]byte, error) {
+func (e *nullEncrypter) Encrypt(plaintext, key, iv, aad []byte) ([]byte, error) {
 	return append([]byte(nil), plaintext...), nil
 }
 
-func (e *nullEncrypter) Decrypt(ciphertext, key []byte) ([]byte, error) {
+func (e *nullEncrypter) Decrypt(ciphertext, key, iv, aad []byte) ([]byte, error) {
 	return append([]byte(nil), ciphertext...), nil
 }
 
-func (e *nullEncrypter) BlockSize() int    { return 1 }
-func (e *nullEncrypter) KeySize() int      { return 0 }
-func (e *nullEncrypter) IVSize() int       { return 0 }
-func (e *nullEncrypter) AlgorithmID() uint16 { return 0 }
+func (e *nullEncrypter) BlockSize() int { return 1 }
+func (e *nullEncrypter) KeySize() int   { return 0 }
+func (e *nullEncrypter) IVSize() int    { return 0 }
 
 // tripleDESCBC implements 3DES-CBC encryption
 type tripleDESCBC struct{}
 
-func (e *tripleDESCBC) Encrypt(plaintext, key []byte) ([]byte, error) {
+func (e *tripleDESCBC) Encrypt(plaintext, key, iv, aad []byte) ([]byte, error) {
 	// Placeholder - implement using crypto/des if needed
 	return nil, fmt.Errorf("3DES-CBC not yet implemented")
 }
 
-func (e *tripleDESCBC) Decrypt(ciphertext, key []byte) ([]byte, error) {
+func (e *tripleDESCBC) Decrypt(ciphertext, key, iv, aad []byte) ([]byte, error) {
 	return nil, fmt.Errorf("3DES-CBC not yet implemented")
 }
 
-func (e *tripleDESCBC) BlockSize() int    { return 8 }
-func (e *tripleDESCBC) KeySize() int      { return 24 }
-func (e *tripleDESCBC) IVSize() int       { return 8 }
-func (e *tripleDESCBC) AlgorithmID() uint16 { return 3 }
+func (e *tripleDESCBC) BlockSize() int { return 8 }
+func (e *tripleDESCBC) KeySize() int   { return 24 }
+func (e *tripleDESCBC) IVSize() int    { return 8 }
 
 // Helper to check if a packet matches IMS ESP policy (destined to port-s)
 func (s *Session) shouldApplyIMSESP(packet []byte) bool {

@@ -137,6 +137,13 @@ type Session struct {
 	mobikeSupported        bool            // 对端是否支持 MOBIKE (RFC 4555)
 	fragmentationSupported bool            // 对端是否支持 IKE Fragmentation (RFC 7383)
 	ikeFragmentMTU         uint32          // 动态探测的当前 IKE 最大分片大小
+
+	// IMS ESP (3GPP TS 33.203) 用于双重封装认证 SIP 流量
+	imsESPMu           sync.RWMutex
+	imsESPPolicy       *IMSESPPolicy
+	imsESPSAOut        *ipsec.SecurityAssociation
+	imsESPRemoteIP     net.IP
+	imsESPRemotePortS  int
 	fragmentBuf            *fragmentBuffer // IKE Fragmentation 接收缓冲区
 
 	// 生命周期管理
@@ -1813,21 +1820,78 @@ func (s *Session) startDataPlaneLoop() {
 			tunReadCount++
 			packet := buf[:n]
 
-			// 解析 IP 头提取目标地址用于调试
+			// 解析 IP 头提取目标地址和端口用于调试
 			var dstIP string
+			var dstPort uint16
 			var proto uint8
 			if len(packet) > 0 {
 				ver := packet[0] >> 4
 				if ver == 4 && len(packet) >= 20 {
 					dstIP = net.IP(packet[16:20]).String()
 					proto = packet[9]
+					// TCP/UDP port is at offset 22-23 for IPv4
+					if proto == 6 || proto == 17 {
+						hdrLen := int(packet[0]&0x0f) * 4
+						if len(packet) >= hdrLen+4 {
+							dstPort = binary.BigEndian.Uint16(packet[hdrLen+2 : hdrLen+4])
+						}
+					}
 				} else if ver == 6 && len(packet) >= 40 {
 					dstIP = net.IP(packet[24:40]).String()
 					proto = packet[6]
+					// TCP/UDP port is at offset 42-43 for IPv6
+					if (proto == 6 || proto == 17) && len(packet) >= 44 {
+						dstPort = binary.BigEndian.Uint16(packet[42:44])
+					}
 				}
 			}
 
-			saOut := s.selectOutgoingSA(packet)
+			// Log every packet to track port 6060 traffic
+			if tunReadCount <= 50 || tunReadCount%20 == 0 {
+				s.Logger.Info("TUN->ESP packet",
+					logger.Uint64("count", tunReadCount),
+					logger.String("dstIP", dstIP),
+					logger.Int("dstPort", int(dstPort)),
+					logger.Int("proto", int(proto)),
+					logger.Int("len", n))
+			}
+
+			// Check if this packet needs IMS ESP encapsulation (double ESP)
+			var innerPacket []byte
+			if s.shouldApplyIMSESP(packet) {
+				// Apply IMS ESP (inner layer)
+				s.imsESPMu.RLock()
+				imsESPSA := s.imsESPSAOut
+				s.imsESPMu.RUnlock()
+
+				if imsESPSA != nil {
+					innerESP, err := ipsec.Encapsulate(packet, imsESPSA)
+					if err != nil {
+						s.Logger.Warn("IMS ESP 封装错误", logger.Err(err), logger.String("dstIP", dstIP))
+						continue
+					}
+
+					// Replace IP payload with ESP, keeping IP header
+					innerPacket, err = s.replaceIPPayloadWithESP(packet, innerESP)
+					if err != nil {
+						s.Logger.Warn("IMS ESP IP 重建错误", logger.Err(err))
+						continue
+					}
+
+					s.Logger.Info("IMS ESP 已应用",
+						logger.String("dstIP", dstIP),
+						logger.Int("dstPort", int(dstPort)),
+						logger.Int("originalLen", len(packet)),
+						logger.Int("imsESPLen", len(innerPacket)),
+						logger.Uint32("imsSPI", imsESPSA.SPI))
+				} else {
+					innerPacket = packet
+				}
+			} else {
+				innerPacket = packet
+			}
+
+			saOut := s.selectOutgoingSA(innerPacket)
 			if saOut == nil {
 				saDropCount++
 				if saDropCount <= 5 || saDropCount%100 == 0 {
@@ -1840,7 +1904,7 @@ func (s *Session) startDataPlaneLoop() {
 				continue
 			}
 
-			espPacket, err := ipsec.Encapsulate(packet, saOut)
+			espPacket, err := ipsec.Encapsulate(innerPacket, saOut)
 			if err != nil {
 				s.Logger.Warn("ESP 封装错误", logger.Err(err), logger.String("dstIP", dstIP))
 				continue

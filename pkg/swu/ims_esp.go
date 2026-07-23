@@ -7,6 +7,7 @@ import (
 
 	"github.com/1239t/swu-go/pkg/crypto"
 	"github.com/1239t/swu-go/pkg/ipsec"
+	"github.com/1239t/swu-go/pkg/logger"
 )
 
 // IMSESPFlow describes one direction of IMS ipsec-3gpp security association.

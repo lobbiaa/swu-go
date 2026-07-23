@@ -304,17 +304,27 @@ func deriveIMSESPKeys(ck, ik []byte, authAlg, encAlg string) (authKey, encKey []
 	return authKey, encKey, nil
 }
 
-// deriveKey derives a key using a simple PRF (can be enhanced to use proper HMAC-SHA-256)
+// deriveKey derives a key using HMAC-SHA-256
 func deriveKey(baseKey, label []byte, keyLen int) []byte {
 	// Simple derivation: HMAC-SHA-256(baseKey, label || counter)
 	// For production, use proper KDF like RFC 5869 HKDF
-	h := crypto.NewHMACSHA256()
+	integ, _ := crypto.GetIntegrityAlgorithm(12) // HMAC-SHA256-128
 	input := append(label, 0x01)
-	mac, _ := h.Compute(input, baseKey)
+	mac := integ.Compute(baseKey, input)
 	if len(mac) >= keyLen {
 		return mac[:keyLen]
 	}
-	return mac
+	// If not enough, append more rounds
+	result := make([]byte, 0, keyLen)
+	result = append(result, mac...)
+	counter := byte(0x02)
+	for len(result) < keyLen {
+		input := append(label, counter)
+		mac := integ.Compute(baseKey, input)
+		result = append(result, mac...)
+		counter++
+	}
+	return result[:keyLen]
 }
 
 func getAuthKeyLength(authAlg string) int {
